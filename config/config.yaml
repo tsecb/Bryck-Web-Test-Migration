@@ -1,0 +1,109 @@
+application:
+  name: BRYCK Web Shipment Playwright
+  base_url: https://192.168.6.35
+  api_base_url: https://192.168.6.35
+  verify_ssl: false
+
+# NOTE: prefer overriding these via env vars in real environments instead of
+# committing plaintext credentials, e.g. WS_CREDENTIALS_USERNAME / WS_CREDENTIALS_PASSWORD
+# (see web_shipment/core/config.py Settings.get for the WS_<DOTTED_KEY> override convention).
+credentials:
+  username: admin
+  password: password
+
+browser:
+  engine: chromium
+  headless: true
+  slow_mo_ms: 0
+  viewport:
+    width: 1680
+    height: 960
+  ignore_https_errors: true
+
+timeouts:
+  default_ms: 10000
+  navigation_ms: 20000
+  assertion_ms: 12000
+
+paths:
+  screenshots_dir: screenshots/web
+  traces_dir: traces/web
+  logs_dir: logs/web
+  reports_dir: reports/web
+
+reporting:
+  allure_results_dir: reports/web/allure-results
+  allure_html_dir: reports/web/allure-html
+  shareable_report_dir: reports/web/shareable-report
+  auto_open_report: false
+
+network:
+  ping_enabled: false
+  ping_timeout_seconds: 1
+  network_test_ip_octet_start: 210
+  dhcp_wait_seconds: 30
+
+shipment_suite:
+  run_bryck_check: true
+  run_storage_matrix: true
+  run_network_static: true
+  run_network_dhcp: true
+  run_power_page_check: true
+  run_object_store_bucket_flow: true
+  # --- New, extensive-coverage flows (tests/web/test_data_management.py) ---
+  run_drive_serial_check: true # read-only; tolerant of a genuinely-null serial
+  run_dashboard_status_check: true # read-only
+  run_bryck_report_generation: true # real report-generation job; safe/non-destructive
+  run_data_transfer_dialog_checks: true # opens+cancels real dialogs; never submits a job
+  run_external_storage_dialog_check: true # opens+cancels the NFS "Add" dialog only
+  # Mount/Unmount hot-pluggable-eject round-trip is a genuinely state-changing
+  # flow (it really unmounts/remounts the live bryck) - OFF by default, opt in
+  # deliberately per-environment.
+  run_mount_eject_cycle: false
+  # Real NFS mount + data transfer/verify jobs require actual external NFS
+  # infrastructure that is not provisioned by default - OFF until configured
+  # below (nfs_host/nfs_mount_point/nfs_export_path all non-null).
+  run_nfs_data_transfer: false
+
+# Extensive (not just "basic") storage-matrix coverage, expanded from the
+# legacy WebTest full matrix. This default is broadened 4x versus the
+# original reduced shipment subset (8 -> 32 variants: encryption x io_size x
+# data_sync x compression, each running a REAL full format+confirm cycle
+# against physical storage) while staying reasonable to run in one sitting.
+#
+# The full legacy WebTest matrix also includes raid6 and a third data_sync
+# mode ("always") and a dedup axis; every combination of dedup=true is
+# already skipped by ``services/matrix.py`` (INVALID_DEDUP_RAID) for both
+# raid5 and raid6, matching the legacy suite's own constraint, so adding
+# dedup:[true] here would not add any additional variants on its own. To run
+# the full, maximally exhaustive matrix (144 variants - expect this to take
+# considerably longer and repeatedly reformat real hardware), replace the
+# block below with:
+#   raid_levels: [[0, 5], [0, 6]]
+#   data_sync: ["application sync", "periodic", "always"]
+#   io_size_kb: [64, 256, 2048]
+test_matrix:
+  filesystem: ["zfs"]
+  encryption: [true, false]
+  io_size_kb: [256, 2048]
+  raid_levels: [[0, 5]]
+  data_sync: ["application sync", "periodic"]
+  dedup: [false]
+  compression: [false, true]
+  object_storage: [true, false]
+  mount_on_reboot: false
+
+# Populate all three to enable the real NFS mount + data-transfer/verify test
+# (``run_nfs_data_transfer`` above must also be true). Left null/empty by
+# default since no external NFS server is provisioned in this environment.
+nfs:
+  host: null
+  mount_point: null
+  export_path: null
+
+# NOTE: UI locators used to live here, but a config file is the wrong place for
+# them - they are implementation details of the pages, not run configuration,
+# and duplicating them in YAML made it easy for the two copies to drift apart
+# (which had already happened - see docs/MIGRATION_MAPPING.md history).
+# Every locator now lives as a SELECTORS class attribute on its matching page
+# object under web_shipment/pages/, next to the code that uses it (real POM).

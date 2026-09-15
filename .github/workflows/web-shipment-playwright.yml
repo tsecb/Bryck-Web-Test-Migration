@@ -1,0 +1,81 @@
+name: Web Shipment Playwright
+
+# The device under test lives on a private/local network (e.g. 192.168.x.x),
+# so this workflow only makes sense on a self-hosted runner with network
+# access to it - GitHub-hosted runners cannot reach it. Manual dispatch only;
+# do not add push/pull_request triggers unless running on such a runner.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Target web base url (device on your local/self-hosted network)
+        required: true
+
+jobs:
+  web-shipment:
+    # Replace with your self-hosted runner label - GitHub-hosted "ubuntu-latest"
+    # cannot reach a private-network device.
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Node for Allure CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+          npm install -g allure-commandline
+
+      - name: Run web shipment suite
+        env:
+          WS_APPLICATION_BASE_URL: ${{ github.event.inputs.base_url }}
+        run: |
+          python run_tests.py --markers shipment
+
+      - name: Upload allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-allure-results
+          path: reports/web/allure-results
+
+      - name: Upload allure html
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-allure-html
+          path: reports/web/allure-html
+
+      - name: Upload shareable report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-shareable-report
+          path: reports/web/shareable-report
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-screenshots
+          path: screenshots/web
+
+      - name: Upload logs-and-traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-logs-traces
+          path: |
+            logs/web
+            traces/web

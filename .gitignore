@@ -1,0 +1,41 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# --- Virtual environment ---
+.venv/
+venv/
+env/
+
+# --- Test / tool caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Playwright ---
+# Browser binaries installed by `playwright install` (reinstalled per-machine, not versioned)
+/ms-playwright/
+
+# --- Generated test artifacts (recreated by every run) ---
+reports/web/allure-results/
+reports/web/allure-html/
+reports/web/shareable-report/
+reports/web/*.zip
+screenshots/web/
+traces/web/
+logs/web/
+
+# --- Local overrides / secrets ---
+.env
+.env.*
+!.env.example
+config/config.local.yaml
+
+# --- Editor / OS ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
