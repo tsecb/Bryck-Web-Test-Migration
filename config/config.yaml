@@ -21,9 +21,18 @@ browser:
   ignore_https_errors: true
 
 timeouts:
-  default_ms: 10000
-  navigation_ms: 20000
-  assertion_ms: 12000
+  # Bumped to 5 minutes: real storage-format/mount operations (test_ui_configure_storage_variant)
+  # can legitimately take a long time to report completion, and default_ms is the shared
+  # per-action timeout used for every click/fill/assertion across the whole suite (see
+  # tests/conftest.py page_timeout_ms + page.set_default_timeout). NOTE: this also means any
+  # genuinely broken/missing element - or an unreachable device - now takes up to 5 minutes to
+  # fail per occurrence instead of 10s (doubled again by pytest.ini's --reruns 1). If that ever
+  # makes quick/negative-path tests unacceptably slow to fail, override just those via
+  # WS_TIMEOUTS_DEFAULT_MS/WS_TIMEOUTS_NAVIGATION_MS env vars for a single run instead of editing
+  # this file.
+  default_ms: 300000
+  navigation_ms: 300000
+  assertion_ms: 300000
 
 paths:
   screenshots_dir: screenshots/web

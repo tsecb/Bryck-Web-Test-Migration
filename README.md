@@ -146,7 +146,6 @@ python -m pytest ...  # or python run_tests.py
 allure open reports/web/allure-html
 ```
 
-
 ## Report Outputs
 
 - Raw results: reports/web/allure-results

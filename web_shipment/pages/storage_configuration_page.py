@@ -75,4 +75,8 @@ class StorageConfigurationPage(BasePage):
         self.click("confirm_submit_button")
 
     def assert_storage_status_visible(self) -> None:
-        expect(self.page.locator(self.selectors["status_label"]).first).to_be_visible()
+        # NOTE (bug fix): this previously omitted `timeout=self.timeout_ms`, silently falling back
+        # to Playwright's hardcoded 5s assertion default - far too short for a real format/mount
+        # operation to report completion. Now honors the same configured timeout as every other
+        # page action (see config/config.yaml timeouts.default_ms).
+        expect(self.page.locator(self.selectors["status_label"]).first).to_be_visible(timeout=self.timeout_ms)
