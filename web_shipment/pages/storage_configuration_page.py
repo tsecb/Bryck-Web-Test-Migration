@@ -21,6 +21,14 @@ class StorageConfigurationPage(BasePage):
         # <span>, but it's a real el-select on this create/format screen (verified against the shipped
         # app bundle) - safe as long as we're on the format wizard, not a "current storage" summary view.
         "io_size_input": "#averageIOSize",
+        # NOTE (unconfirmed live): only rendered when "Block Store" is selected in
+        # filesystem_dropdown - the number-of-volumes field from the legacy block-store
+        # matrix axis. This id is a best-effort guess (not yet confirmed against a real
+        # unformatted device, unlike every other selector on this page - see live-
+        # exploration notes); configure_variant() guards it with `.count() > 0` so it
+        # safely no-ops if this guess is wrong. Re-verify against the live DOM before
+        # relying on it, and update this comment once confirmed.
+        "volumes_input": "#numvolumes",
         "dedup_switch": "#dedupswitch",
         "compression_switch": "#compresswitch",
         "data_sync_dropdown": "#formatdatasync",
@@ -58,7 +66,13 @@ class StorageConfigurationPage(BasePage):
         if self.page.locator(self.selectors["raid_dropdown"]).count() > 0:
             self.select_option("raid_dropdown", variant.raid_label)
 
-        self.fill("io_size_input", str(variant.io_size_kb))
+        # Guarded (previously unconditional): this field doesn't render for Block Store,
+        # so an unguarded fill would fail every block-store variant.
+        if self.page.locator(self.selectors["io_size_input"]).count() > 0:
+            self.fill("io_size_input", str(variant.io_size_kb))
+
+        if variant.volumes is not None and self.page.locator(self.selectors["volumes_input"]).count() > 0:
+            self.fill("volumes_input", str(variant.volumes))
 
         if self.page.locator(self.selectors["dedup_switch"]).count() > 0 and variant.dedup:
             self.click("dedup_switch")

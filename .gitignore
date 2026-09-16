@@ -21,11 +21,14 @@ env/
 # --- Generated test artifacts (recreated by every run) ---
 reports/web/allure-results/
 reports/web/allure-html/
-reports/web/shareable-report/
-reports/web/*.zip
+reports/web/allure-report-web-*.html
+reports/web/allure-report-web-*/
 screenshots/web/
 traces/web/
 logs/web/
+
+# --- Archived results from previous runs (see run_tests.py archive_previous_run) ---
+archive/
 
 # --- Local overrides / secrets ---
 .env

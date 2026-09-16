@@ -43,8 +43,14 @@ paths:
 reporting:
   allure_results_dir: reports/web/allure-results
   allure_html_dir: reports/web/allure-html
-  shareable_report_dir: reports/web/shareable-report
-  auto_open_report: false
+  # Final, single self-contained HTML file for THIS run only - no old runs mixed
+  # in. Generated fresh every run via `allure generate --single-file`; just
+  # open it directly in a browser, no HTTP server needed. See run_tests.py.
+  single_file_report_dir: reports/web
+  # Every run archives the previous run's allure-results/allure-html/logs/
+  # screenshots/traces here first (timestamped subfolder), before anything new
+  # is written, so the new run - and its report - never mixes in old data.
+  archive_dir: archive/web
 
 network:
   ping_enabled: false
@@ -91,6 +97,20 @@ shipment_suite:
 #   raid_levels: [[0, 5], [0, 6]]
 #   data_sync: ["application sync", "periodic", "always"]
 #   io_size_kb: [64, 256, 2048]
+#
+# The legacy suite ALSO covers a separate "Block Store" storage type
+# (ConfigStore.test_configure(..., 'block', volumes), varying a volumes:[4, 8]
+# axis) alongside the ZFS "File System" type above - a different UI path
+# (StorageConfigurationPage selects "Block Store" in #storetypeselect; only
+# encryption/volumes/object_storage apply there, since raid/io_size/data_sync/
+# dedup/compression are ZFS-only fields that services/matrix.py and
+# storage_configuration_page.py now skip automatically for block variants).
+# NOT in the default matrix below - it's a real, destructive format cycle
+# against physical hardware just like the ZFS variants, and the "number of
+# volumes" field id has not been confirmed live yet (see NOTE in
+# storage_configuration_page.py). To opt in, add "block" to filesystem:
+#   filesystem: ["zfs", "block"]
+#   volumes: [4, 8]
 test_matrix:
   filesystem: ["zfs"]
   encryption: [true, false]
@@ -100,6 +120,8 @@ test_matrix:
   dedup: [false]
   compression: [false, true]
   object_storage: [true, false]
+  # Only used when filesystem includes "block" - see comment above.
+  volumes: [4, 8]
   mount_on_reboot: false
 
 # Populate all three to enable the real NFS mount + data-transfer/verify test

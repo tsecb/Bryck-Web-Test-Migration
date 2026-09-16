@@ -1,0 +1,1 @@
+[{"values":["Shipment-Lab"],"name":"Target.Environment"},{"values":["https://192.168.6.35"],"name":"Target.BaseURL"},{"values":["Web Shipment"],"name":"Suite"},{"values":["pytest + Playwright + Allure"],"name":"Framework"},{"values":["chromium"],"name":"Browser"},{"values":["True"],"name":"Headless"},{"values":["2026-09-15T12:06:51"],"name":"RunDate"}]

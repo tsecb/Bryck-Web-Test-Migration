@@ -7,3 +7,5 @@ allure-python-commons==2.13.5
 PyYAML==6.0.2
 requests==2.32.4
 python-json-logger==2.0.7
+# Only needed for scripts/remote_control.py (Windows-side SSH orchestration of a remote run)
+paramiko==5.0.0

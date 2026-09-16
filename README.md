@@ -1,6 +1,6 @@
 # BRYCK Web Shipment Playwright Framework
 
-A clean migration of the legacy web shipment suite from selenium/unittest to Playwright + pytest + Allure with trend-ready reporting and shareable report outputs.
+A clean migration of the legacy web shipment suite from selenium/unittest to Playwright + pytest + Allure, with a single self-contained HTML report per run and support for triggering/monitoring runs on a remote Linux test-runner over SSH.
 
 ## Highlights
 
@@ -12,14 +12,25 @@ A clean migration of the legacy web shipment suite from selenium/unittest to Pla
   and can fail/pass independently.
 - Fast, browser-free API health check (`test_device_api_reports_system_info`) runs
   first so a dead device fails immediately instead of via a slow browser timeout.
+- Fail-fast device reachability preflight in `run_tests.py`: a single ~10s HTTP
+  request checks the device is even up before archiving anything or starting
+  pytest - if it's down, the run aborts immediately with a clear message instead
+  of every test failing individually via the full navigation timeout x reruns
+  (which, at the 5-minute timeouts below, could otherwise take hours). Use
+  `--skip-preflight` to bypass if needed.
 - Negative-path authentication test (`test_login_with_invalid_credentials_is_rejected`)
   using a dedicated unauthenticated `guest_page` fixture.
 - Network changes are verified through the read-only management API, not just the UI
   form submitting without error.
 - Per-test artifacts: screenshot, trace zip, json logs.
-- Allure rich metadata: environment, categories, executor.
-- Trend chart continuity by preserving history between runs.
-- Shareable report folder and zip bundle after each run.
+- Allure rich metadata: environment, categories, executor, per-test suite/epic/
+  feature tags and docstring-derived descriptions.
+- Every run archives the previous run's results/logs/screenshots/traces first,
+  then generates one self-contained single-file HTML report for that run only
+  - never a blend of old and new results (see "Notes on Allure Reports" below).
+- Screen-managed remote execution on a Linux test-runner
+  (`scripts/run_in_screen.sh`) plus a Windows-side SSH orchestrator
+  (`scripts/remote_control.py`: trigger/status/fetch) - see "Remote execution" below.
 - GitHub Actions workflow for CI artifact publishing.
 - Full System ("Administration") coverage: read-only Status, External Storage,
   Cloud Setup, Settings (Timezone/Session Timeout/Date and Time), Alerts (Receiver
@@ -138,23 +149,30 @@ python -m pytest -m shipment
 python -m pytest tests/web/test_data_management.py -v
 ```
 
-Each run writes fresh output to `reports/web/`, `screenshots/web/`, `traces/web/`,
-and `logs/web/` (all git-ignored - see `.gitignore`). Open the HTML report with:
+Each run first archives the _previous_ run's `reports/web/allure-results`,
+`reports/web/allure-html`, `logs/web/`, `screenshots/web/`, and `traces/web/`
+into a timestamped folder under `archive/web/` (git-ignored), so a new run
+never mixes old results into its report. Open the report with:
 
 ```powershell
-python -m pytest ...  # or python run_tests.py
-allure open reports/web/allure-html
+python run_tests.py
+# then just double-click / open the printed reports/web/allure-report-web-<timestamp>.html
 ```
 
 ## Report Outputs
 
-- Raw results: reports/web/allure-results
-- HTML: reports/web/allure-html
-- Shareable folder: reports/web/shareable-report
-- Shareable zip: reports/web/allure-report-web-<timestamp>.zip
-- Screenshots: screenshots/web
-- Traces: traces/web
-- Logs: logs/web
+- **Single-file HTML report (open this one)**: `reports/web/allure-report-web-<timestamp>.html`
+  - Fully self-contained (Allure `--single-file`) - no HTTP server needed, works
+    identically whether generated locally or on a remote machine; just download
+    and open it.
+  - Reflects only the current run: suites/epics/features, per-test steps,
+    screenshots, trace attachments, and an overview dashboard of everything
+    that ran (pass/fail counts, categories, timeline).
+- Raw results (for the html generation step, or re-generating later): `reports/web/allure-results`
+- Previous runs' results/html/logs/screenshots/traces: `archive/web/<timestamp>/`
+- Screenshots: `screenshots/web`
+- Traces: `traces/web`
+- Logs: `logs/web`
 
 ## Adding New Test Cases
 
@@ -230,9 +248,78 @@ The full legacy Selenium suite (`ci_cd/tests/func/test_web.py` +
 - **iSCSI bryck-insertion** (`Configuration._test_bryck_inserted`): SSH/iSCSI
   hardware provisioning, not a web UI concern.
 
-## Notes on Allure Trends
+## Notes on Allure Reports
 
-Trend charts appear when previous history exists. This framework automatically copies previous report history into new results before HTML generation.
+Each run's report reflects ONLY that run - no blending with previous runs.
+`run_tests.py` archives the previous run's `allure-results`/`allure-html`/
+`logs`/`screenshots`/`traces` into a timestamped folder under `archive/web/`
+_before_ anything new is written (see `archive_previous_run` in
+`web_shipment/services/allure_report.py`), then generates a fresh single-file
+HTML report from just-written results. There is no trend-history
+carry-over between runs by design - if you want the classic Allure trend
+widget across many runs, that would require intentionally not archiving
+`allure-results`/`allure-html`, which conflicts with the "every report is only
+this run" requirement this framework is built around.
+
+## Remote execution (Linux test-runner over SSH)
+
+The suite is meant to run from wherever your browser/Playwright process can
+actually reach the device - which may be a dedicated Linux test-runner rather
+than your own machine. Two ways to run it there:
+
+### Directly on the remote machine
+
+```bash
+cd ~/Bryck-Web-Test-Migration
+git pull                                   # get the latest code
+source .venv/bin/activate
+chmod +x scripts/run_in_screen.sh
+./scripts/run_in_screen.sh --markers shipment
+```
+
+`scripts/run_in_screen.sh` manages a single canonical `screen` session named
+`web-test`: it kills any existing session with that name first (no
+accumulating zombies from repeated triggers), starts a fresh detached session
+running `run_tests.py` (which itself archives the previous run's data first),
+and tees full console output to `logs/web/runner_<timestamp>.log` so you can
+follow along even without attaching. The session exits naturally when the run
+finishes.
+
+```bash
+screen -r web-test          # attach to watch live (Ctrl+A then D to detach)
+tail -f logs/web/runner_*.log
+```
+
+### Triggered from Windows (no manual SSH/password prompts)
+
+`scripts/remote_control.py` wraps the same workflow over SSH using `paramiko`.
+Credentials come from environment variables only - never hardcode them:
+
+```powershell
+$env:WS_REMOTE_HOST = "192.168.6.36"
+$env:WS_REMOTE_USER = "bryck"
+$env:WS_REMOTE_PASSWORD = "<real password>"   # or WS_REMOTE_KEY_PATH for key auth (preferred)
+$env:WS_REMOTE_DIR  = "~/rperiyas/Bryck-Web-Test-Migration"  # must match the actual clone path on that machine - default is ~/Bryck-Web-Test-Migration
+
+python scripts/remote_control.py trigger --markers shipment
+python scripts/remote_control.py status     # screen session state + tail of the latest log
+python scripts/remote_control.py fetch      # downloads the latest single-file HTML report
+```
+
+`fetch` pulls the report into `reports/web/fetched/` locally - it's the same
+self-contained single HTML file either way, so opening it works identically
+whether the run happened locally or on the remote machine.
+
+> **Known network issue (2026-09-15/16 investigation)**: a run on `192.168.6.36`
+> failed every single test with `Page.goto: net::ERR_ADDRESS_UNREACHABLE` at
+> `https://192.168.6.35/`. This is **not a test/code bug** - diagnostics from
+> `.36` (`ip route get 192.168.6.35`, `ping`, `arp -n`) show a correct route to
+> `192.168.6.35/24` via its `oob_net0` interface, but ARP resolution comes back
+> `(incomplete)` and ping reports `Destination Host Unreachable` - i.e. nothing
+> answers at the network (L2/ARP) level on that link, even though the route
+> table is fine. Check that the device is powered on and its network cable/port
+> is actually connected to the same switch/segment as `.36`'s `oob_net0`
+> interface before re-running - no config or timeout change fixes this.
 
 ## Legacy Mapping
 

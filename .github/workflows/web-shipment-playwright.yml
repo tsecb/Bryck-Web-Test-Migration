@@ -50,19 +50,12 @@ jobs:
           name: web-allure-results
           path: reports/web/allure-results
 
-      - name: Upload allure html
+      - name: Upload single-file HTML report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: web-allure-html
-          path: reports/web/allure-html
-
-      - name: Upload shareable report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-shareable-report
-          path: reports/web/shareable-report
+          name: web-html-report
+          path: reports/web/allure-report-web-*.html
 
       - name: Upload screenshots
         if: always()

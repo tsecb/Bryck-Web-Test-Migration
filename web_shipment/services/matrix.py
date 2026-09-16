@@ -16,6 +16,9 @@ def build_storage_variants(matrix: dict) -> list[StorageVariant]:
     mount_on_reboot = bool(matrix.get("mount_on_reboot", False))
 
     for filesystem in matrix.get("filesystem", ["zfs"]):
+        if filesystem == "block":
+            variants.extend(_build_block_store_variants(matrix, mount_on_reboot))
+            continue
         for encryption in matrix.get("encryption", [True, False]):
             for raid in _to_raid_modes(matrix.get("raid_levels", [[0, 5]])):
                 for io_size in matrix.get("io_size_kb", [512]):
@@ -40,6 +43,34 @@ def build_storage_variants(matrix: dict) -> list[StorageVariant]:
                                             mount_on_reboot=mount_on_reboot,
                                         )
                                     )
+    return variants
+
+
+def _build_block_store_variants(matrix: dict, mount_on_reboot: bool) -> list[StorageVariant]:
+    """Build variants for the legacy block-store path (``ConfigStore.test_configure(...,
+    'block', volumes)``). Block Store only varies by encryption/volume-count/object-storage -
+    the ZFS-only fields (raid, io size, data sync, dedup, compression) don't render for this
+    storage type, so ``StorageConfigurationPage.configure_variant`` skips them via its
+    ``.count() > 0`` guards.
+    """
+    variants: list[StorageVariant] = []
+    for encryption in matrix.get("encryption", [True, False]):
+        for volumes in matrix.get("volumes", [4, 8]):
+            for object_storage in matrix.get("object_storage", [False]):
+                variants.append(
+                    StorageVariant(
+                        filesystem="block",
+                        encryption=bool(encryption),
+                        raid_mode=(0, 0),
+                        io_size_kb=0,
+                        data_sync="",
+                        dedup=False,
+                        compression=False,
+                        object_storage=bool(object_storage),
+                        mount_on_reboot=mount_on_reboot,
+                        volumes=int(volumes),
+                    )
+                )
     return variants
 
 

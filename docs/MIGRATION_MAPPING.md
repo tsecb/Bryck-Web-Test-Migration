@@ -10,7 +10,7 @@ This document maps the old shipment web suite from ci_cd to the new framework.
 ## Migrated Cases
 
 1. test_bryck_check -> test_bryck_presence_check
-2. test_ui_configure_all_variants -> test_ui_configure_storage_variant (32-variant matrix by default; see config/config.yaml for the full 144-variant legacy matrix)
+2. test_ui_configure_all_variants -> test_ui_configure_storage_variant (32-variant matrix by default; see config/config.yaml for the full 144-variant legacy matrix, and the opt-in "Block Store"/volumes axis added 2026-09-16 - off by default, id unconfirmed live yet)
 3. test_ui_network_configure -> test_ui_network_configure
 4. test_ui_network_configure_using_dhcp -> test_ui_network_configure_using_dhcp
 5. test_ui_system_page_drive_serial_no_check -> test_drive_serial_number_field_renders (tests/web/test_data_management.py)

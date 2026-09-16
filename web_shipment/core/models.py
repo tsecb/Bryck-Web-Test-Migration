@@ -27,10 +27,16 @@ class StorageVariant:
     compression: bool
     object_storage: bool
     mount_on_reboot: bool
+    # Only meaningful when filesystem == "block" (legacy ConfigStore.test_configure's
+    # block-store path, which varies by volume count instead of raid/io_size/data_sync/
+    # dedup/compression - those fields are ZFS-only and don't render for Block Store).
+    volumes: int | None = None
 
     @property
     def id(self) -> str:
         """Return a deterministic id for pytest parameter display."""
+        if self.filesystem == "block":
+            return f"fs=block|enc={self.encryption}|vol={self.volumes}|obj={self.object_storage}"
         return (
             f"fs={self.filesystem}|enc={self.encryption}|raid={self.raid_mode[0]}_{self.raid_mode[1]}"
             f"|io={self.io_size_kb}|sync={self.data_sync}|dedup={self.dedup}|cmp={self.compression}"
