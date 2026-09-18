@@ -1,35 +1,26 @@
 #!/usr/bin/env bash
 # scripts/run_in_screen.sh
 #
-# Runs the web shipment suite inside a single, canonical `screen` session on
-# the remote Linux test-runner machine. Meant to be triggered either directly
-# on that machine, or remotely via `python scripts/remote_control.py trigger`.
+# Runs the web shipment suite inside a single canonical `screen` session on the
+# remote Linux test-runner machine. This script is intended to be started from
+# the project root with either:
 #
-# Behavior:
-#   1. Looks for an existing "web-test" screen session and kills it first, so
-#      re-triggering a run never piles up duplicate/zombie sessions.
-#   2. Starts a brand-new detached session that runs `run_tests.py` (which
-#      itself archives the previous run's results/logs/screenshots/traces
-#      before doing anything else - see web_shipment/services/allure_report.py).
-#   3. Tees all console output to logs/web/runner_<timestamp>.log so you can
-#      `tail -f` it even without attaching to screen, and so it survives even
-#      if the session is later wiped.
-#   4. The session exits naturally when the run completes (no `exec bash`
-#      keeping it alive) - `screen -ls` simply won't show it anymore.
+#   bash scripts/run_in_screen.sh --suite web_shipment
+#   ./scripts/run_in_screen.sh --suite web_shipment
 #
-# Usage:
-#   ./scripts/run_in_screen.sh                       # default markers=shipment
-#   ./scripts/run_in_screen.sh --markers "shipment and network"
-#
-# Monitor:
-#   screen -r web-test          # attach (Ctrl+A then D to detach)
-#   tail -f logs/web/runner_*.log
+# It does not require a manual ``chmod +x`` step because it self-heals its own
+# executable bit before launching the detached screen session.
 
 set -uo pipefail
 
 SCREEN_NAME="web-test"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_PATH="$PROJECT_DIR/scripts/run_in_screen.sh"
 cd "$PROJECT_DIR"
+
+# Ensure the launcher is executable even on a fresh clone, so users do not need
+# to remember a separate chmod step before running the project from the repo root.
+chmod +x "$SCRIPT_PATH" 2>/dev/null || true
 
 VENV_PYTHON="$PROJECT_DIR/.venv/bin/python"
 if [ ! -x "$VENV_PYTHON" ]; then
@@ -40,6 +31,18 @@ mkdir -p logs/web
 STAMP="$(date +%Y%m%d_%H%M%S)"
 RUNNER_LOG="logs/web/runner_${STAMP}.log"
 
+# Preserve argument quoting exactly as passed by the caller so expressions like
+# --markers "network or storage" survive the round trip to the inner bash -lc.
+ESCAPED_ARGS=()
+for arg in "$@"; do
+    ESCAPED_ARGS+=("$(printf '%q' "$arg")")
+done
+COMMAND_STRING="'${VENV_PYTHON}' run_tests.py ${ESCAPED_ARGS[*]}"
+
+printf '%s\n' "==> Starting Bryck web test runner from ${PROJECT_DIR}"
+printf '%s\n' "==> Target command: ${COMMAND_STRING}"
+printf '%s\n' "==> Runner log   : ${RUNNER_LOG}"
+
 echo "==> Checking for an existing '${SCREEN_NAME}' screen session..."
 EXISTING="$(screen -ls 2>/dev/null | grep -oE "[0-9]+\.${SCREEN_NAME}[[:space:]]" | awk '{print $1}' || true)"
 if [ -n "$EXISTING" ]; then
@@ -48,7 +51,6 @@ if [ -n "$EXISTING" ]; then
         [ -z "$pidname" ] && continue
         echo "      quitting ${pidname}"
         screen -S "$pidname" -X quit >/dev/null 2>&1 || true
-        # Force-kill if the process is still alive after -X quit.
         pid="${pidname%%.*}"
         if kill -0 "$pid" >/dev/null 2>&1; then
             kill -9 "$pid" >/dev/null 2>&1 || true
@@ -59,11 +61,10 @@ if [ -n "$EXISTING" ]; then
 fi
 
 echo "==> Starting the suite in a new detached screen session named '${SCREEN_NAME}'"
-echo "    Console log : ${RUNNER_LOG}"
 echo "    Attach      : screen -r ${SCREEN_NAME}   (Ctrl+A then D to detach)"
 echo "    Tail        : tail -f ${RUNNER_LOG}"
 
-screen -dmS "$SCREEN_NAME" bash -c "'${VENV_PYTHON}' run_tests.py $* 2>&1 | tee '${RUNNER_LOG}'; echo; echo RUN_DONE"
+screen -dmS "$SCREEN_NAME" bash -lc "cd '$PROJECT_DIR' && exec ${COMMAND_STRING} 2>&1 | tee '$RUNNER_LOG'"
 sleep 1
 
 if screen -ls 2>/dev/null | grep -q "\.${SCREEN_NAME}[[:space:]]"; then
@@ -71,3 +72,6 @@ if screen -ls 2>/dev/null | grep -q "\.${SCREEN_NAME}[[:space:]]"; then
 else
     echo "==> WARNING: could not confirm the screen session started - check 'screen -ls' manually."
 fi
+
+printf '%s\n' "==> Detailed execution output is being streamed to the log file above."
+printf '%s\n' "==> When ready, attach with: screen -r ${SCREEN_NAME}"

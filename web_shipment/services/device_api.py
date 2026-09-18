@@ -17,13 +17,26 @@ class DeviceApiClient:
     timeout_seconds: int = 15
 
     def info(self) -> dict[str, Any]:
-        response = requests.get(
+        urls = [
             f"{self.base_url.rstrip('/')}/api/v1/system/info",
-            timeout=self.timeout_seconds,
-            verify=self.verify_ssl,
-        )
-        response.raise_for_status()
-        return response.json().get("result", {})
+            f"{self.base_url.rstrip('/')}/api/system/info",
+        ]
+
+        last_error: Exception | None = None
+        for url in urls:
+            try:
+                response = requests.get(
+                    url,
+                    timeout=self.timeout_seconds,
+                    verify=self.verify_ssl,
+                )
+                response.raise_for_status()
+                return response.json().get("result", {})
+            except requests.RequestException as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+        return {}
 
     def up_interfaces(self) -> dict[str, str]:
         """Return interface-name to ipv4 mapping for UP interfaces."""

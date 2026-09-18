@@ -25,8 +25,8 @@ Subcommands:
               reports/web/fetched/ on this machine.
 
 Usage:
-    python scripts/remote_control.py trigger
-    python scripts/remote_control.py trigger --markers shipment
+    python scripts/remote_control.py trigger -- --suite web_shipment
+    python scripts/remote_control.py trigger -- --markers "network or storage"
     python scripts/remote_control.py status
     python scripts/remote_control.py fetch
 """
@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import sys
 from pathlib import Path
 
@@ -92,8 +93,8 @@ def cmd_trigger(args: argparse.Namespace) -> int:
     ssh = _connect()
     try:
         remote_dir = _remote_dir()
-        extra = " ".join(args.extra or [])
-        command = f"cd {remote_dir} && chmod +x scripts/run_in_screen.sh && ./scripts/run_in_screen.sh {extra}"
+        escaped_extra = " ".join(shlex.quote(arg) for arg in (args.extra or []))
+        command = f"cd {remote_dir} && python run_tests.py --screen {escaped_extra}".rstrip()
         print(f"==> {command}")
         rc, out, err = _run(ssh, command, timeout=30)
         print(out)

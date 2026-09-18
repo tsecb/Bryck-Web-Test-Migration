@@ -1,7 +1,7 @@
 application:
   name: BRYCK Web Shipment Playwright
-  base_url: https://192.168.6.35
-  api_base_url: https://192.168.6.35
+  base_url: http://192.168.6.35
+  api_base_url: http://192.168.6.35
   verify_ssl: false
 
 # NOTE: prefer overriding these via env vars in real environments instead of

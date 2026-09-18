@@ -1,119 +1,38 @@
-# BRYCK Web Shipment Playwright Framework
+# Bryck Web Test Migration
 
-A clean migration of the legacy web shipment suite from selenium/unittest to Playwright + pytest + Allure, with a single self-contained HTML report per run and support for triggering/monitoring runs on a remote Linux test-runner over SSH.
+This project contains the migrated Bryck web test suite, built on pytest + Playwright + Allure. The goal is to provide one clean run entry point that handles setup, suite selection, report generation, archive cleanup, and remote execution without manual repeated commands.
 
-## Highlights
+## What is included
 
-- True Page Object Model: each page class under `web_shipment/pages/` owns its own
-  `SELECTORS` locator map and interaction methods - `config.yaml` only holds run
-  configuration (URLs, credentials, timeouts, matrix), not UI selectors.
-- Config-driven storage test matrix, expanded into one parametrized pytest case per
-  variant (`test_ui_configure_storage_variant[...]`) so each permutation is reported
-  and can fail/pass independently.
-- Fast, browser-free API health check (`test_device_api_reports_system_info`) runs
-  first so a dead device fails immediately instead of via a slow browser timeout.
-- Fail-fast device reachability preflight in `run_tests.py`: a single ~10s HTTP
-  request checks the device is even up before archiving anything or starting
-  pytest - if it's down, the run aborts immediately with a clear message instead
-  of every test failing individually via the full navigation timeout x reruns
-  (which, at the 5-minute timeouts below, could otherwise take hours). Use
-  `--skip-preflight` to bypass if needed.
-- Negative-path authentication test (`test_login_with_invalid_credentials_is_rejected`)
-  using a dedicated unauthenticated `guest_page` fixture.
-- Network changes are verified through the read-only management API, not just the UI
-  form submitting without error.
-- Per-test artifacts: screenshot, trace zip, json logs.
-- Allure rich metadata: environment, categories, executor, per-test suite/epic/
-  feature tags and docstring-derived descriptions.
-- Every run archives the previous run's results/logs/screenshots/traces first,
-  then generates one self-contained single-file HTML report for that run only
-  - never a blend of old and new results (see "Notes on Allure Reports" below).
-- Screen-managed remote execution on a Linux test-runner
-  (`scripts/run_in_screen.sh`) plus a Windows-side SSH orchestrator
-  (`scripts/remote_control.py`: trigger/status/fetch) - see "Remote execution" below.
-- GitHub Actions workflow for CI artifact publishing.
-- Full System ("Administration") coverage: read-only Status, External Storage,
-  Cloud Setup, Settings (Timezone/Session Timeout/Date and Time), Alerts (Receiver
-  form validation, Email Setup, Notification SNS/SQS), and a view-only Power check
-  that intentionally never clicks the real Shutdown control.
-- Full Object Store coverage (Bryck Storage > Object Store): a real, safe
-  create-bucket-then-cancel flow (never persists a bucket), plus Access and
-  Configure screen checks.
-- Extensive/full storage-matrix + data-management coverage migrated from the
-  legacy full `WebTest` suite (`tests/web/test_data_management.py`): Dashboard
-  status, System > Status drive-serial field, System > Report generation,
-  Data Transfer (Data Center) add/verify dialogs, External Storage NFS mount
-  dialog, a real (config-gated) NFS mount + transfer + verify flow, and the
-  Bryck Storage Mount/Unmount hot-pluggable-eject round-trip (opt-in, off by
-  default - see "Migration scope" below).
-- Every new locator was confirmed against the live device DOM (not guessed from
-  static analysis) before being written into a page object.
-- **Session-drop fail-safe (two layers)**: the device's session can expire (10 min
-  default, configurable in System > Settings) or otherwise log the browser out
-  mid-run. (1) `BasePage` wraps every `click`/`fill`/`get_text`/`select_option` in a
-  try/except: on a `TimeoutError`, it checks whether the login form has silently
-  reappeared and, if so, logs back in with the configured credentials and retries
-  that exact step once. (2) At the whole-test level, `pytest.ini` runs with
-  `--reruns 1 --only-rerun TimeoutError`, so if recovery mid-test still isn't
-  enough, the entire test reruns with a brand-new authenticated `context_page`
-  (fresh browser context + fresh login) rather than failing outright. Real
-  assertion failures are untouched by either layer - only timeout-shaped failures
-  are treated as recoverable.
+- One runner: [run_tests.py](run_tests.py)
+- Suite-aware execution for one or many suites
+- Automatic venv creation and dependency install when needed
+- Archive-before-run cleanup of previous data
+- One self-contained HTML Allure report per run
+- Remote Linux execution via a detached screen session
+- Windows-side SSH trigger/status/fetch helper
 
-## Project Structure
+## Project structure
 
-```text
-Bryck Web Test Migration/
-  config/
-    config.yaml
-  docs/
-    MIGRATION_MAPPING.md
-  tests/
-    conftest.py
-    web/
-      test_web_shipment.py
-      test_system_administration.py
-      test_object_store.py
-      test_data_management.py
-  web_shipment/
-    core/
-      config.py
-      logger.py
-      models.py
-    pages/
-      base_page.py
-      login_page.py
-      navigation_page.py
-      network_configuration_page.py
-      storage_configuration_page.py
-      system_status_page.py
-      object_store_page.py
-      settings_page.py
-      cloud_setup_page.py
-      alerts_page.py
-      external_storage_page.py
-      power_page.py
-      dashboard_page.py
-      system_report_page.py
-      data_transfer_page.py
-      mount_eject_page.py
-    services/
-      allure_report.py
-      device_api.py
-      host_probe.py
-      matrix.py
-  .github/workflows/
-    web-shipment-playwright.yml
-  pytest.ini
-  requirements.txt
-  run_tests.py
-```
+- [config/config.yaml](config/config.yaml) — runtime config, base URL, credentials, timeouts, reporting paths
+- [tests/web/test_web_shipment.py](tests/web/test_web_shipment.py) — shipment suite
+- [tests/web/test_system_administration.py](tests/web/test_system_administration.py) — admin/system suite
+- [tests/web/test_object_store.py](tests/web/test_object_store.py) — object-store suite
+- [tests/web/test_data_management.py](tests/web/test_data_management.py) — data-management checks
+- [web_shipment](web_shipment) — page objects, fixtures, services, config models
+- [scripts/run_in_screen.sh](scripts/run_in_screen.sh) — starts the run in a detached screen session on the remote Linux runner
+- [scripts/remote_control.py](scripts/remote_control.py) — triggers, views status, and fetches the latest report from a remote machine
+- [pytest.ini](pytest.ini) — pytest configuration and markers
+- [requirements.txt](requirements.txt) — Python dependencies
+- [reports/web](reports/web) — output directory for Allure results and generated HTML
+- [archive/web](archive/web) — timestamped archive of previous runs
 
-## Install
+## Setup
+
+From the project root:
 
 ```powershell
-git clone <your-repo-url>
-cd "Bryck Web Test Migration"
+cd "C:\Users\SanjayJayakumar\Downloads\Bryck Web Test Migration"
 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -121,206 +40,242 @@ pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-Then point the suite at your device. Either edit `config/config.yaml` directly
-(`application.base_url`, `credentials.username`/`password`), or leave the
-committed defaults alone and override at run time with environment variables
-(never commit real credentials):
+If needed, override the target device in one of these ways:
 
 ```powershell
-$env:WS_APPLICATION_BASE_URL = "https://<device-ip>"
+# Option 1: edit config/config.yaml
+# Option 2: environment variables
+$env:WS_APPLICATION_BASE_URL = "http://192.168.6.35"
 $env:WS_CREDENTIALS_USERNAME = "admin"
-$env:WS_CREDENTIALS_PASSWORD = "<real-password>"
+$env:WS_CREDENTIALS_PASSWORD = "<your-password>"
 ```
 
-## Run
+## Local execution
 
-```powershell
-# Full migrated shipment suite (all markers tagged `shipment`)
-python run_tests.py
-
-# Only a subset, by marker expression
-python run_tests.py --markers "shipment and network"
-
-# One-off base URL override without touching config.yaml or env vars
-python run_tests.py --base-url https://192.168.0.140
-
-# Equivalent, calling pytest directly (useful for -k, --reruns 0, single tests, etc.)
-python -m pytest -m shipment
-python -m pytest tests/web/test_data_management.py -v
-```
-
-Each run first archives the _previous_ run's `reports/web/allure-results`,
-`reports/web/allure-html`, `logs/web/`, `screenshots/web/`, and `traces/web/`
-into a timestamped folder under `archive/web/` (git-ignored), so a new run
-never mixes old results into its report. Open the report with:
+The preferred entry point is the runner in [run_tests.py](run_tests.py). This is the single command you can use from the repo root:
 
 ```powershell
 python run_tests.py
-# then just double-click / open the printed reports/web/allure-report-web-<timestamp>.html
 ```
 
-## Report Outputs
+### Run one suite only
 
-- **Single-file HTML report (open this one)**: `reports/web/allure-report-web-<timestamp>.html`
-  - Fully self-contained (Allure `--single-file`) - no HTTP server needed, works
-    identically whether generated locally or on a remote machine; just download
-    and open it.
-  - Reflects only the current run: suites/epics/features, per-test steps,
-    screenshots, trace attachments, and an overview dashboard of everything
-    that ran (pass/fail counts, categories, timeline).
-- Raw results (for the html generation step, or re-generating later): `reports/web/allure-results`
-- Previous runs' results/html/logs/screenshots/traces: `archive/web/<timestamp>/`
-- Screenshots: `screenshots/web`
-- Traces: `traces/web`
-- Logs: `logs/web`
+```powershell
+python run_tests.py --suite web_shipment
+python run_tests.py --suite system_administration
+python run_tests.py --suite object_store
+python run_tests.py --suite data_management
+```
 
-## Adding New Test Cases
+### Run multiple suites in one command
 
-1. Add or extend a page object under `web_shipment/pages/`: add new locators to that
-   page's `SELECTORS` dict and a method that drives them (locators never go in
-   `config.yaml`).
-2. Add business flow in `tests/web/test_web_shipment.py`, instantiating the page
-   object with `timeout_ms=page_timeout_ms`.
-3. Reuse existing fixtures from `tests/conftest.py`:
-   - `settings` / `page_timeout_ms` - config and shared per-action timeout.
-   - `context_page` - an already-authenticated page (most tests should use this).
-   - `guest_page` - a page loaded to the login form but NOT authenticated, for
-     negative-path auth tests.
-4. If the case needs matrix coverage, add values under `test_matrix` in
-   `config/config.yaml` - `pytest_generate_tests` in the test module automatically
-   expands it into one parametrized test per permutation.
-5. Mark new tests with an existing marker (`smoke`, `storage`, `network`, `api`,
-   `negative`, `system`, `object_store`, `settings`, `alerts`, `dashboard`, `report`,
-   `data_transfer`, `external_storage`, `mount_eject`) or add a new one to
-   `pytest.ini`'s `markers` list (required because `--strict-markers` is set).
+```powershell
+python run_tests.py --suite web_shipment system_administration
+python run_tests.py --suite web_shipment data_management
+python run_tests.py --suite all
+```
 
-### Safety rules for new tests (device is real, shared hardware)
+### Advanced filter with pytest markers
 
-- Never click a real "Shutdown"/destructive control from a test - see
-  `web_shipment/pages/power_page.py`, which deliberately has no click method for
-  its Shutdown button at all.
-- Never create/delete/modify real user data (buckets, cloud configs, alert users)
-  - prefer an "open form -> assert state -> Cancel" pattern like
-    `test_object_store_bucket_create_dialog_can_be_cancelled`.
-- When reading a table's row count right after navigating to it, wait for the
-  list to settle first (row or empty-state visible) before calling `.count()` -
-  see `ObjectStorePage.bucket_count()` for the pattern.
+```powershell
+python run_tests.py --markers "network or storage"
+python run_tests.py --markers "smoke and system"
+```
 
-## Migration scope (legacy `WebTest`/`WebTestShipment` -> this suite)
+### Base URL override without editing config
 
-The full legacy Selenium suite (`ci_cd/tests/func/test_web.py` +
-`test_web_shipment.py`) was analyzed method-by-method and migrated as follows:
+```powershell
+python run_tests.py --base-url http://192.168.6.35
+python run_tests.py --suite web_shipment --base-url http://192.168.6.35
+```
 
-**Migrated (extensive coverage, not just the reduced shipment subset):**
+### Skip preflight check if you really know the device is healthy
 
-- Full storage-format matrix (`test_ui_configure_storage_variant`), expanded from
-  8 to 32 variants by default (encryption x io_size x data_sync x compression) -
-  see the `test_matrix` comment block in `config/config.yaml` for how to opt into
-  the maximally exhaustive 144-variant legacy matrix (raid5+raid6, 3 io sizes, 3
-  data-sync modes).
-- Drive serial number field check, dashboard status check, bryck report
-  generation, network configure (static + DHCP), Object Store bucket/access/
-  configure, and the full System (Administration) section - all as before.
-- Data Transfer (Data Center) add-transfer/add-verify dialogs, External Storage
-  NFS mount dialog - migrated as safe "open -> assert fields -> Cancel" checks
-  by default, plus a real, config-gated NFS mount + transfer + verify flow
-  (`test_nfs_mount_and_data_transfer`) for environments with actual NFS
-  infrastructure (set `nfs.host`/`nfs.mount_point`/`nfs.export_path` in
-  `config.yaml` and `shipment_suite.run_nfs_data_transfer: true`).
-- Bryck Storage Mount/Unmount hot-pluggable-eject round-trip
-  (`test_bryck_mount_with_hot_pluggable_eject`) - genuinely state-changing (really
-  ejects/remounts the live bryck), so it is **off by default**
-  (`shipment_suite.run_mount_eject_cycle: false`); opt in deliberately per
-  environment.
+```powershell
+python run_tests.py --skip-preflight
+```
 
-**Explicitly out of scope (with rationale):**
+> The default runner performs a fast preflight check before starting the suite. If the device is down, it stops early instead of burning time on slow browser timeouts.
 
-- **Cloud configure/deconfigure/transfer**: already disabled/commented out in the
-  legacy suite itself. Its legacy test fixture data (`web_store.py`) also
-  contains what appear to be **real AWS access key/secret and Azure tenant/
-  client credentials hardcoded in plaintext** - these were never copied into
-  this codebase. **If these credentials are still valid, rotate them.**
-- **Legacy dashboard API-vs-UI cross-check** (`test_ui_dashboard_wizard`): already
-  stubbed with `pass` in the legacy suite, and its absolute-XPath locators no
-  longer match the current (redesigned) dashboard, which has no stable
-  per-field ids to check against. Migrated instead as a simpler, always-on
-  check (`test_dashboard_shows_mounted_status`).
-- **iSCSI bryck-insertion** (`Configuration._test_bryck_inserted`): SSH/iSCSI
-  hardware provisioning, not a web UI concern.
+## Remote execution with no extra script to remember
 
-## Notes on Allure Reports
-
-Each run's report reflects ONLY that run - no blending with previous runs.
-`run_tests.py` archives the previous run's `allure-results`/`allure-html`/
-`logs`/`screenshots`/`traces` into a timestamped folder under `archive/web/`
-_before_ anything new is written (see `archive_previous_run` in
-`web_shipment/services/allure_report.py`), then generates a fresh single-file
-HTML report from just-written results. There is no trend-history
-carry-over between runs by design - if you want the classic Allure trend
-widget across many runs, that would require intentionally not archiving
-`allure-results`/`allure-html`, which conflicts with the "every report is only
-this run" requirement this framework is built around.
-
-## Remote execution (Linux test-runner over SSH)
-
-The suite is meant to run from wherever your browser/Playwright process can
-actually reach the device - which may be a dedicated Linux test-runner rather
-than your own machine. Two ways to run it there:
-
-### Directly on the remote machine
+From the remote repo directory, you do not need to pass a special screen flag anymore. The runner now auto-starts the detached `screen` session for Linux remote runs by default:
 
 ```bash
 cd ~/Bryck-Web-Test-Migration
-git pull                                   # get the latest code
-source .venv/bin/activate
-chmod +x scripts/run_in_screen.sh
-./scripts/run_in_screen.sh --markers shipment
+python run_tests.py --suite web_shipment
 ```
 
-`scripts/run_in_screen.sh` manages a single canonical `screen` session named
-`web-test`: it kills any existing session with that name first (no
-accumulating zombies from repeated triggers), starts a fresh detached session
-running `run_tests.py` (which itself archives the previous run's data first),
-and tees full console output to `logs/web/runner_<timestamp>.log` so you can
-follow along even without attaching. The session exits naturally when the run
-finishes.
+That command will:
+
+- detect that this is a Linux remote-style run
+- replace any existing `web-test` session if one is still alive
+- start a fresh screen session automatically
+- run the selected suite inside the screen session
+- stream all output to `logs/web/runner_<timestamp>.log`
+- leave the session available for live inspection with `screen -r web-test`
+
+Examples:
 
 ```bash
-screen -r web-test          # attach to watch live (Ctrl+A then D to detach)
+python run_tests.py --suite system_administration
+python run_tests.py --suite object_store
+python run_tests.py --suite all
+python run_tests.py --markers "network or storage"
+```
+
+If you ever want to force the screen behavior explicitly, you can still use `--screen`. If you want to disable the auto-start behavior, set:
+
+```bash
+export WS_AUTO_SCREEN=0
+```
+
+You do not need to call `scripts/run_in_screen.sh` directly unless you are intentionally using the compatibility wrapper. The clean path is to use the runner itself.
+
+## What the runner does automatically
+
+When you run:
+
+```powershell
+python run_tests.py --suite web_shipment
+```
+
+it does all of this for you:
+
+1. Creates or reuses the project .venv
+2. Installs Python requirements if needed
+3. Archives previous report/log artifacts from the last run
+4. Runs only the selected suite(s)
+5. Generates a fresh single-file HTML report for the current run
+6. Keeps old results separate in archive/web so they do not mix with the new output
+
+## Reports and archive behavior
+
+Every new run archives the previous run’s artifacts before generating a new report. The archive folder is under:
+
+- [archive/web](archive/web)
+
+The current report is generated in:
+
+- [reports/web](reports/web)
+
+The single file you should open is the generated Allure HTML report in that folder, for example:
+
+```text
+reports/web/allure-report-web-<timestamp>.html
+```
+
+This is the one-file report intended to be opened directly in a browser.
+
+## Remote execution
+
+You can run the suite on a separate Linux machine and still use the same project workflow.
+
+### A) Run directly on the remote Linux machine
+
+This is the supported path:
+
+```bash
+cd ~/Bryck-Web-Test-Migration
+python run_tests.py --suite web_shipment
+```
+
+The same runner handles the detached screen session automatically. It:
+
+- kills any stale `web-test` screen session
+- starts a fresh detached screen session named `web-test`
+- runs the selected suite inside that session
+- writes the detailed run output to `logs/web/runner_<timestamp>.log`
+- leaves the session available for live inspection with `screen -r web-test`
+
+Useful commands:
+
+```bash
+screen -ls
+screen -r web-test
 tail -f logs/web/runner_*.log
 ```
 
-### Triggered from Windows (no manual SSH/password prompts)
+### B) Trigger from your Windows machine over SSH
 
-`scripts/remote_control.py` wraps the same workflow over SSH using `paramiko`.
-Credentials come from environment variables only - never hardcode them:
+Set the remote environment variables first:
 
 ```powershell
 $env:WS_REMOTE_HOST = "192.168.6.36"
 $env:WS_REMOTE_USER = "bryck"
-$env:WS_REMOTE_PASSWORD = "<real password>"   # or WS_REMOTE_KEY_PATH for key auth (preferred)
-$env:WS_REMOTE_DIR  = "~/rperiyas/Bryck-Web-Test-Migration"  # must match the actual clone path on that machine - default is ~/Bryck-Web-Test-Migration
-
-python scripts/remote_control.py trigger --markers shipment
-python scripts/remote_control.py status     # screen session state + tail of the latest log
-python scripts/remote_control.py fetch      # downloads the latest single-file HTML report
+$env:WS_REMOTE_PASSWORD = "<password>"   # or set WS_REMOTE_KEY_PATH instead
+$env:WS_REMOTE_DIR = "~/Bryck-Web-Test-Migration"
 ```
 
-`fetch` pulls the report into `reports/web/fetched/` locally - it's the same
-self-contained single HTML file either way, so opening it works identically
-whether the run happened locally or on the remote machine.
+Then trigger the remote run through the runner itself:
 
-> **Known network issue (2026-09-15/16 investigation)**: a run on `192.168.6.36`
-> failed every single test with `Page.goto: net::ERR_ADDRESS_UNREACHABLE` at
-> `https://192.168.6.35/`. This is **not a test/code bug** - diagnostics from
-> `.36` (`ip route get 192.168.6.35`, `ping`, `arp -n`) show a correct route to
-> `192.168.6.35/24` via its `oob_net0` interface, but ARP resolution comes back
-> `(incomplete)` and ping reports `Destination Host Unreachable` - i.e. nothing
-> answers at the network (L2/ARP) level on that link, even though the route
-> table is fine. Check that the device is powered on and its network cable/port
-> is actually connected to the same switch/segment as `.36`'s `oob_net0`
-> interface before re-running - no config or timeout change fixes this.
+```powershell
+python scripts/remote_control.py trigger -- --suite web_shipment
+python scripts/remote_control.py trigger -- --suite system_administration
+python scripts/remote_control.py trigger -- --suite all
+```
 
-## Legacy Mapping
+This helper now simply delegates to the same remote-safe flow:
 
-See docs/MIGRATION_MAPPING.md for test-by-test migration mapping from the old suite.
+```bash
+python run_tests.py --screen --suite web_shipment
+```
+
+Check the status of the remote run:
+
+```powershell
+python scripts/remote_control.py status
+```
+
+Download the latest single-file HTML report from the remote machine:
+
+```powershell
+python scripts/remote_control.py fetch
+```
+
+The fetched report will be placed under:
+
+- [reports/web/fetched](reports/web/fetched)
+
+## Remote trigger examples you can use
+
+```powershell
+# Trigger only the shipment suite
+python scripts/remote_control.py trigger -- --suite web_shipment
+
+# Trigger only data management checks
+python scripts/remote_control.py trigger -- --suite data_management
+
+# Trigger the full set
+python scripts/remote_control.py trigger -- --suite all
+
+# Trigger with pytest marker filtering
+python scripts/remote_control.py trigger -- --markers "network or storage"
+```
+
+## One-line cheat sheet
+
+```powershell
+# Local run
+python run_tests.py --suite web_shipment
+
+# Remote run from Windows
+python scripts/remote_control.py trigger -- --suite web_shipment
+
+# Check status on remote
+python scripts/remote_control.py status
+
+# Fetch report from remote
+python scripts/remote_control.py fetch
+```
+
+## Notes
+
+- The project runner is the supported entry point. Prefer it over raw pytest calls.
+- The remote screen session is intentionally single-session and auto-replaced, so it stays clean and avoids stale runner processes.
+- Old output is archived before a new run starts, so each run remains isolated.
+- The device must be reachable; otherwise the preflight check aborts early to avoid a long slow failure.
+
+## Migration note
+
+This repo was migrated from the legacy web suite into the newer pytest + Playwright + Allure framework. The migration mapping lives in [docs/MIGRATION_MAPPING.md](docs/MIGRATION_MAPPING.md).

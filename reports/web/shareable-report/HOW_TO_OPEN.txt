@@ -1,4 +1,0 @@
-Open this report using an HTTP server, not file://.
-Examples:
-  python -m http.server 9090
-Then browse http://localhost:9090

@@ -23,6 +23,8 @@ reports/web/allure-results/
 reports/web/allure-html/
 reports/web/allure-report-web-*.html
 reports/web/allure-report-web-*/
+reports/web/shareable-report/
+reports/web/fetched/
 screenshots/web/
 traces/web/
 logs/web/
